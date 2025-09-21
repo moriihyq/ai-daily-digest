@@ -1,0 +1,41 @@
+name: AI Daily Digest
+
+on:
+  # 允许你手动在Actions页面点击 "Run workflow" 来触发
+  workflow_dispatch:
+  
+  schedule:
+    # 使用Cron语法，设置定时任务
+    # 这个设置表示在每天的UTC时间0点30分执行
+    # 对应北京时间是早上8点30分，是个不错的推送时间
+    - cron: '30 0 * * *'
+
+jobs:
+  build-and-run:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 1. Checkout Repository
+      # 第一步：下载你的代码到虚拟机
+      uses: actions/checkout@v3
+
+    - name: 2. Set up Python 3.10
+      # 第二步：安装Python环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: 3. Install Dependencies
+      # 第三步：根据 requirements.txt 安装所有依赖库
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: 4. Run the Python Script
+      # 第四步：执行你的主脚本
+      # env部分会将你在GitHub Secrets中设置的密钥注入到环境变量中
+      # 这样你的Python代码就能通过 os.environ.get() 读取到了
+      env:
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        SEND_KEY: ${{ secrets.SEND_KEY }}
+      run: python main.py
