@@ -5,6 +5,7 @@ import os
 import time
 
 # --- 模块一：从“机器之心”网站爬取最新的AI文章 ---
+# --- 模块一：从“机器之心”网站爬取最新的AI文章 (V2 - 更新版) ---
 def fetch_jqzj_articles(max_articles=3):
     """
     从机器之心网站爬取最新的文章列表。
@@ -12,6 +13,7 @@ def fetch_jqzj_articles(max_articles=3):
     :return: 一个包含文章字典（标题和链接）的列表。
     """
     print("开始从机器之心爬取最新文章...")
+    # 目标URL和请求头
     url = "https://www.jiqizhixin.com/"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
@@ -23,13 +25,16 @@ def fetch_jqzj_articles(max_articles=3):
         soup = BeautifulSoup(response.text, 'html.parser')
         
         articles_found = []
-        # 机器之心的文章列表项在 <article> 标签中
-        for item in soup.find_all('article', limit=max_articles):
-            title_tag = item.find('h4', class_='article-item__title')
-            link_tag = item.find('a', class_='article-item__link')
+        # V2更新：机器之心更新了前端样式，我们需要用新的class来定位文章
+        # 现在文章列表项在 class='article-item_root__...'.
+        article_items = soup.find_all('div', class_=lambda c: c and c.startswith('article-item_root__'), limit=max_articles)
+        
+        for item in article_items:
+            # 标题和链接都在 class='article-item_titleLink__...' 的 <a> 标签里
+            link_tag = item.find('a', class_=lambda c: c and c.startswith('article-item_titleLink__'))
             
-            if title_tag and link_tag:
-                title = title_tag.get_text(strip=True)
+            if link_tag:
+                title = link_tag.get_text(strip=True)
                 # 链接是相对路径，需要拼接成完整URL
                 link = "https://www.jiqizhixin.com" + link_tag['href']
                 articles_found.append({'title': title, 'url': link})
@@ -163,4 +168,5 @@ if __name__ == "__main__":
             # 4. 推送最终报告
             push_to_wechat(server_send_key, "今日AI前沿速报", final_report)
         else:
+
             print("没有获取到文章，今日不推送。")
