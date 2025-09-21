@@ -27,7 +27,7 @@ def fetch_jqzj_articles(max_articles=3):
         
         articles_found = []
         # JSON结构与之前类似，代码基本可以复用
-        for item in data['data'][:max_articles]:
+        for item in data[:max_articles]:
             title = item.get('title', '无标题')
             article_id = item.get('id')
             if article_id:
@@ -137,5 +137,6 @@ if __name__ == "__main__":
             push_to_wechat(server_send_key, "今日AI前沿速报", final_report)
         else:
             print("没有获取到文章，今日不推送。")
+
 
 
