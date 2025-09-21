@@ -4,6 +4,7 @@ import os
 import time
 
 # --- 模块一：爬虫 (V3 - API直连最终版) ---
+# --- 模块一：爬虫 (V4 - 最终修正版API) ---
 def fetch_jqzj_articles(max_articles=3):
     """
     通过直接请求机器之心的官方API来获取最新文章列表。
@@ -11,30 +12,26 @@ def fetch_jqzj_articles(max_articles=3):
     :param max_articles: 你想获取的文章数量。
     :return: 一个包含文章字典（标题和链接）的列表。
     """
-    print("开始通过API直连方式获取最新文章...")
-    # 这是机器之心网站加载文章所使用的API接口地址
-    api_url = f"https://www.jiqizhixin.com/api/v1/posts?page=1&type=rest"
+    print("开始通过API直连方式获取最新文章 (V4)...")
+    # V4修正：找到了网站当前正在使用的正确API端点
+    api_url = f"https://www.jiqizhixin.com/api/v1/articles?page=1"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        # 模拟浏览器请求，有些API会需要这个
-        "Referer": "https://www.jiqizhixin.com/"
+        "Referer": "https://www.jiqizhixin.com/articles" # 伪装成从文章列表页发出的请求
     }
     
     try:
         response = requests.get(api_url, headers=headers)
-        response.raise_for_status() # 确保请求成功
-        
-        # API返回的是JSON格式数据，我们直接解析它
+        response.raise_for_status()
         data = response.json()
         
         articles_found = []
-        # 从JSON数据中提取我们需要的部分
-        # data['data'] 是一个包含多篇文章信息的列表
+        # JSON结构与之前类似，代码基本可以复用
         for item in data['data'][:max_articles]:
             title = item.get('title', '无标题')
-            # 文章链接需要我们自己拼接
             article_id = item.get('id')
             if article_id:
+                # 链接结构也确认无变化
                 link = f"https://www.jiqizhixin.com/articles/{article_id}"
                 articles_found.append({'title': title, 'url': link})
         
@@ -140,4 +137,5 @@ if __name__ == "__main__":
             push_to_wechat(server_send_key, "今日AI前沿速报", final_report)
         else:
             print("没有获取到文章，今日不推送。")
+
 
