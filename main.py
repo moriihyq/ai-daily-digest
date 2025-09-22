@@ -1,9 +1,14 @@
-import requests
-from bs4 import BeautifulSoup
-import google.generativeai as genai
 import os
 import time
 import traceback
+import requests
+from bs4 import BeautifulSoup
+import google.generativeai as genai
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 # --- 模块一：获取文章列表 (V6 - 已验证) ---
 def fetch_jqzj_articles(max_articles=3):
@@ -20,9 +25,8 @@ def fetch_jqzj_articles(max_articles=3):
             title = item.get('title', '无标题')
             article_id = item.get('id')
             if article_id:
-                # 我们同时需要id和url
                 link = f"https://www.jiqizhixin.com/articles/{article_id}"
-                articles_found.append({'title': title, 'url': link, 'id': article_id})
+                articles_found.append({'title': title, 'url': link})
         print(f"成功获取到 {len(articles_found)} 篇文章。")
         return articles_found
     except Exception as e:
@@ -30,35 +34,36 @@ def fetch_jqzj_articles(max_articles=3):
         traceback.print_exc()
         return []
 
-# --- 模块二：获取文章正文 (V4 - API直连最终版) ---
-def get_article_content(article_id):
-    """
-    通过文章ID，直接请求内容API，获取最干净的文章正文HTML。
-    """
-    print(f"正在通过内容API获取文章正文 (ID: {article_id})...")
-    # 这就是隐藏的内容API
-    content_api_url = f"https://www.jiqizhixin.com/api/v1/articles/{article_id}"
-    headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://www.jiqizhixin.com/"}
+# --- 模块二：获取文章正文 (V5 - Selenium终极版) ---
+def get_article_content(url):
+    print(f"正在使用Selenium加载文章页面: {url}...")
+    chrome_options = Options()
+    chrome_options.add_argument("--headless") # 无头模式，不在界面显示浏览器
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    
+    driver = None
     try:
-        response = requests.get(content_api_url, headers=headers)
-        response.raise_for_status()
-        data = response.json()
-        # 从返回的JSON中，找到包含HTML正文的键
-        html_content = data.get('data', {}).get('content')
-        if html_content:
-            # 使用BeautifulSoup解析这段HTML，提取纯文本
-            soup = BeautifulSoup(html_content, 'html.parser')
-            text_content = '\n'.join(p.get_text(strip=True) for p in soup.find_all('p'))
-            print("成功提取到文章正文。")
-            return text_content
-        else:
-            print("警告：内容API返回的数据中没有正文。")
-            return None
+        driver = webdriver.Chrome(options=chrome_options)
+        driver.get(url)
+        # 等待文章正文容器出现，最长等待10秒
+        wait = WebDriverWait(driver, 10)
+        content_div = wait.until(
+            EC.presence_of_element_located((By.CLASS_NAME, "detail__content"))
+        )
+        
+        # 提取正文
+        text_content = content_div.text
+        print("成功使用Selenium提取到文章正文。")
+        return text_content
     except Exception as e:
-        print(f"错误：请求内容API失败 - {e}")
+        print(f"错误：使用Selenium获取正文失败 - {e}")
         return None
+    finally:
+        if driver:
+            driver.quit()
 
-# --- 模块三：Gemini总结 (V3 - 旗舰模型版) ---
+# --- 模块三：Gemini总结 (V3 - 已验证) ---
 def summarize_with_gemini(api_key, title, content):
     if not content:
         print(f"因'{title}'文章内容为空，跳过Gemini总结。")
@@ -92,21 +97,23 @@ def summarize_with_gemini(api_key, title, content):
         print(f"错误：调用Gemini API失败 - {e}")
         return f"**对文章 '{title}' 的总结失败：API调用出错。**"
 
-# --- 模块四：Server酱推送 (保持不变) ---
+# --- 模块四：Server酱推送 (V2 - Turbo稳定版) ---
 def push_to_wechat(send_key, title, content):
-    print("正在推送到微信...")
-    url = f"https://sctapi.ftqq.com/sctapi/v1/send" # 使用V1版本send API
+    print("正在推送到微信 (Turbo版)...")
+    # 使用官方推荐的Turbo版API
+    url = f"https://sctapi.ftqq.com/{send_key}.send"
     data = {'title': title, 'desp': content}
     try:
-        response = requests.post(url, params={'sendkey': send_key}, data=data)
-        if response.json().get("code") == 0:
+        response = requests.post(url, data=data)
+        response_json = response.json()
+        if response_json.get("code") == 0:
             print("成功：消息已推送到微信！")
         else:
             print(f"错误：推送失败 - {response.text}")
     except Exception as e:
         print(f"错误：推送请求失败 - {e}")
 
-# --- 主执行函数 (V3 - 最终版) ---
+# --- 主执行函数 (V4 - Selenium版) ---
 if __name__ == "__main__":
     gemini_api_key = os.environ.get("GEMINI_API_KEY")
     server_send_key = os.environ.get("SEND_KEY")
@@ -118,8 +125,8 @@ if __name__ == "__main__":
         if articles:
             final_report = "## 🚀 AI前沿每日速报\n\n"
             for article in articles:
-                # 调用内容获取函数时，传入article ID
-                content = get_article_content(article['id'])
+                # 调用内容获取函数时，传入完整的url
+                content = get_article_content(article['url'])
                 summary = summarize_with_gemini(gemini_api_key, article['title'], content)
                 final_report += f"### 📄 {article['title']}\n\n"
                 final_report += f"**原文链接**：[{article['url']}]({article['url']})\n\n"
@@ -129,6 +136,7 @@ if __name__ == "__main__":
             push_to_wechat(server_send_key, "今日AI前沿速报", final_report)
         else:
             print("没有获取到文章，今日不推送。")
+
 
 
 
