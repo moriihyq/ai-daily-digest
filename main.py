@@ -62,6 +62,62 @@ def get_article_content(url):
         if driver:
             driver.quit()
 
+# --- 模块五：抓取 GitHub Trending 项目 (新功能) ---
+def fetch_github_trending(top_n=1):
+    """
+    抓取 GitHub Trending 页面上 Python 语言分类下的热门项目。
+
+    Args:
+        top_n (int): 需要抓取的项目数量，默认为1。
+
+    Returns:
+        list: 包含项目信息的字典列表，例如 
+              [{'name': '...', 'url': '...', 'description': '...', 'stars': '...'}]
+    """
+    print(f"开始抓取 GitHub Trending Top {top_n} Python 项目...")
+    url = "https://github.com/trending/python?since=daily"
+    headers = {"User-Agent": "Mozilla/5.0"} # 模拟浏览器访问
+    
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # GitHub Trending页面的每个项目都在一个 <article class="Box-row"> 标签里
+        repo_list = soup.find_all('article', class_='Box-row')
+        
+        trending_repos = []
+        for repo in repo_list[:top_n]:
+            # 提取项目名称和相对链接
+            repo_title_element = repo.find('h2', class_='h3 lh-condensed').find('a')
+            repo_name = repo_title_element.get_text(strip=True).replace(" / ", "/")
+            repo_relative_url = repo_title_element['href']
+            repo_url = f"https://github.com{repo_relative_url}"
+            
+            # 提取项目描述
+            description_element = repo.find('p', class_='col-9 color-fg-muted my-1 pr-4')
+            repo_description = description_element.get_text(strip=True) if description_element else "暂无描述。"
+            
+            # 提取星标数
+            star_element = repo.find('a', href=f"{repo_relative_url}/stargazers")
+            repo_stars = star_element.get_text(strip=True) if star_element else "N/A"
+            
+            trending_repos.append({
+                'name': repo_name,
+                'url': repo_url,
+                'description': repo_description,
+                'stars': repo_stars
+            })
+        
+        print(f"成功抓取到 {len(trending_repos)} 个热门项目。")
+        return trending_repos
+
+    except Exception as e:
+        print(f"错误：抓取 GitHub Trending 失败 - {e}")
+        traceback.print_exc()
+        return []
+
 # --- 模块三：Gemini总结 (✨ 按照官方文档重写) ---
 def summarize_with_gemini(title: str, content: str) -> str:
     """
@@ -123,6 +179,55 @@ def summarize_with_gemini(title: str, content: str) -> str:
         traceback.print_exc()
         return f"**对文章 '{title}' 的总结失败：API调用出错。**"
 
+# --- 模块六：使用 Gemini 分析开源项目 (新功能) ---
+def analyze_project_with_gemini(project_data: dict) -> str:
+    """
+    使用 Gemini 为一个开源项目生成深入的分析报告。
+
+    Args:
+        project_data (dict): 从爬虫函数获取的项目信息字典。
+
+    Returns:
+        str: Gemini 生成的 Markdown 格式分析报告。
+    """
+    print(f"正在使用 Gemini 分析开源项目: {project_data['name']}")
+    
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        
+        # 为开源项目分析量身定制的 Prompt
+        prompt = f"""
+        作为一名资深的AI技术导师和顶尖的开源项目贡献者，请为一名AI专业的大学生，深入解读下面这个今天在GitHub上很热门的开源项目。
+        项目名称：{project_data['name']}
+        项目描述：{project_data['description']}
+        项目链接：{project_data['url']}
+        星标数：{project_data['stars']}
+
+        请严格按照以下Markdown格式输出，语言要专业、有启发性，并且 actionable（可操作）：
+
+        ### 🌟 项目速览 (Project Overview)
+        （用一句话概括这个项目是做什么的，核心价值是什么。）
+
+        ### 💡 价值与痛点 (Value & Pain Point)
+        （分析这个项目为什么会变得热门？它可能解决了开发者或研究者的哪个具体痛点？）
+
+        ### 🛠️ 技术栈亮点 (Tech Stack Highlights)
+        （根据项目描述和名称，推测它可能用到了哪些关键的技术、框架或库？例如：PyTorch, LangChain, FastAPI等。其中有没有值得关注的亮点？）
+
+        ### 📖 作为AI学生，如何学习这个项目？
+        - **第一步**：（给出开始学习这个项目的第一个具体步骤，例如：克隆仓库，并运行官方的demo。）
+        - **第二步**：(给出深入学习的建议，例如：阅读项目的核心代码文件 `xxx.py`，理解其主逻辑。)
+        - **第三步**：(给出参与贡献的建议，例如：尝试修复一个标记为 'good first issue' 的问题，或者为文档添加中文翻译。)
+        """
+
+        response = model.generate_content(prompt)
+        return response.text
+
+    except Exception as e:
+        print(f"错误：调用 Gemini 分析项目失败 - {e}")
+        traceback.print_exc()
+        return f"**对项目 '{project_data['name']}' 的分析失败：API调用出错。**"
+
 # --- 模块四：推送 (无需修改) ---
 def push_to_wechat(token: str, title: str, content: str):
     print("正在使用 PushPlus 推送到微信...")
@@ -143,44 +248,57 @@ def push_to_wechat(token: str, title: str, content: str):
     except Exception as e:
         print(f"错误：PushPlus 推送请求失败 - {e}")
 
-# --- 主执行函数 (✨ 采用官方推荐的配置方式) ---
+
+# --- 主执行函数 (V3 - 集成 GitHub Trending) ---
 if __name__ == "__main__":
-    # 1. 从环境变量中安全地获取密钥
-    # 您的截图显示您已在GitHub Secrets中正确设置了 GEMINI_API_KEY
+    # 1. 获取密钥和配置API (不变)
     gemini_api_key = os.environ.get("GEMINI_API_KEY")
     pushplus_token = os.environ.get("PUSHPLUS_TOKEN")
 
     if not gemini_api_key or not pushplus_token:
         print("错误：必须在环境变量中设置 GEMINI_API_KEY 和 PUSHPLUS_TOKEN")
     else:
-        # 2. ✨ 程序开始时，一次性配置 Gemini API
         try:
             genai.configure(api_key=gemini_api_key)
             print("Gemini API 配置成功。")
         except Exception as e:
             print(f"错误：配置 Gemini API 失败 - {e}")
-            exit() # 配置失败则直接退出
+            exit()
 
-        # 3. 开始执行核心逻辑
-        articles = fetch_jqzj_articles(max_articles=3)
+        # 2. 准备最终的推送报告
+        final_report = "## 🚀 华工AI学子专属速报\n\n"
+        
+        # --- Part 1: 文章精读 ---
+        final_report += "### 📰 今日文章精读\n"
+        articles = fetch_jqzj_articles(max_articles=1)
         if articles:
-            final_report = "## 🚀 AI前沿每日速报\n\n"
-            for article in articles:
-                content = get_article_content(article['url'])
-                # ✨ 调用重写后的函数，无需再传入密钥
-                summary = summarize_with_gemini(article['title'], content)
-                
-                final_report += f"### 📄 {article['title']}\n\n"
-                final_report += f"**原文链接**：[{article['url']}]({article['url']})\n\n"
-                final_report += summary
-                final_report += "\n\n---\n\n"
-                # 在文章处理间隙加入短暂延时，避免过于频繁的请求
-                time.sleep(1) 
+            article = articles[0]
+            content = get_article_content(article['url'])
+            summary = summarize_with_gemini(article['title'], content)
             
-            # 4. 推送最终报告
-            push_to_wechat(pushplus_token, "今日AI前沿速报", final_report)
+            final_report += f"#### 📄 {article['title']}\n"
+            final_report += f"**原文链接**：[{article['url']}]({article['url']})\n\n"
+            final_report += summary
         else:
-            print("没有获取到文章，今日不推送。")
+            final_report += "今日未能获取到新文章。\n"
+            
+        final_report += "\n---\n\n" # 添加分割线
+
+        # --- Part 2: 热门开源项目分析 ---
+        final_report += "### 💻 今日热门开源项目\n"
+        trending_projects = fetch_github_trending(top_n=1)
+        if trending_projects:
+            project = trending_projects[0]
+            analysis = analyze_project_with_gemini(project)
+            
+            final_report += f"#### 🚀 {project['name']} (⭐ {project['stars']})\n"
+            final_report += f"**项目链接**：[{project['url']}]({project['url']})\n\n"
+            final_report += analysis
+        else:
+            final_report += "今日未能获取到热门开源项目。\n"
+
+        # 3. 推送整合后的报告
+        push_to_wechat(pushplus_token, "今日AI前沿速报 (文章+项目)", final_report)
 
 
 
