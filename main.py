@@ -61,14 +61,29 @@ def get_article_content(url):
             driver.quit()
 
 # --- 模块三：Gemini总结 (V5 - 稳定免费版) ---
+# --- 模块三：Gemini总结 (V6 - 强制V1 API版) ---
 def summarize_with_gemini(api_key, title, content):
     if not content:
         print(f"因'{title}'文章内容为空，跳过Gemini总结。")
         return f"**对文章 '{title}' 的总结失败：未能获取到原文。**"
     print(f"正在使用Gemini总结文章: {title}")
+    
+    # --- 新增代码：开始 ---
+    # 强制指定使用 v1 API，绕过任何环境问题
+    from google.api_core import client_options
+    client_options = client_options.ClientOptions(
+        api_endpoint="generativelanguage.googleapis.com"
+    )
+    # --- 新增代码：结束 ---
+
     genai.configure(api_key=api_key)
     # 最终修正：使用免费额度最慷慨的 gemini-1.0-pro 模型
-    model = genai.GenerativeModel('gemini-1.0-pro')
+    # --- 修改代码：在初始化模型时传入 client_options ---
+    model = genai.GenerativeModel(
+        'gemini-1.0-pro',
+        client_options=client_options  # 将这行加在这里
+    )
+
     prompt = f"""
     作为一名顶尖的AI技术分析师，请使用中文，为我精准地总结下面这篇关于“{title}”的文章。
     请严格按照以下Markdown格式输出，不要有任何多余的文字：
@@ -92,7 +107,9 @@ def summarize_with_gemini(api_key, title, content):
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
+        # 打印更详细的错误信息，便于调试
         print(f"错误：调用Gemini API失败 - {e}")
+        traceback.print_exc() # 打印完整的错误堆栈
         return f"**对文章 '{title}' 的总结失败：API调用出错。**"
 
 # --- 模块四：推送 (V3 - PushPlus 稳定版) ---
@@ -137,6 +154,7 @@ if __name__ == "__main__":
             push_to_wechat(pushplus_token, "今日AI前沿速报", final_report)
         else:
             print("没有获取到文章，今日不推送。")
+
 
 
 
