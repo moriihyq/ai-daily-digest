@@ -38,7 +38,7 @@ def fetch_jqzj_articles(max_articles=3):
 def get_article_content(url):
     print(f"正在使用Selenium加载文章页面: {url}...")
     chrome_options = Options()
-    chrome_options.add_argument("--headless") # 无头模式，不在界面显示浏览器
+    chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     
@@ -46,13 +46,10 @@ def get_article_content(url):
     try:
         driver = webdriver.Chrome(options=chrome_options)
         driver.get(url)
-        # 等待文章正文容器出现，最长等待10秒
         wait = WebDriverWait(driver, 10)
         content_div = wait.until(
             EC.presence_of_element_located((By.CLASS_NAME, "detail__content"))
         )
-        
-        # 提取正文
         text_content = content_div.text
         print("成功使用Selenium提取到文章正文。")
         return text_content
@@ -63,14 +60,15 @@ def get_article_content(url):
         if driver:
             driver.quit()
 
-# --- 模块三：Gemini总结 (V3 - 已验证) ---
+# --- 模块三：Gemini总结 (V5 - 稳定免费版) ---
 def summarize_with_gemini(api_key, title, content):
     if not content:
         print(f"因'{title}'文章内容为空，跳过Gemini总结。")
         return f"**对文章 '{title}' 的总结失败：未能获取到原文。**"
     print(f"正在使用Gemini总结文章: {title}")
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-pro-latest')
+    # 最终修正：使用免费额度最慷慨的 gemini-1.0-pro 模型
+    model = genai.GenerativeModel('gemini-1.0-pro')
     prompt = f"""
     作为一名顶尖的AI技术分析师，请使用中文，为我精准地总结下面这篇关于“{title}”的文章。
     请严格按照以下Markdown格式输出，不要有任何多余的文字：
@@ -97,35 +95,38 @@ def summarize_with_gemini(api_key, title, content):
         print(f"错误：调用Gemini API失败 - {e}")
         return f"**对文章 '{title}' 的总结失败：API调用出错。**"
 
-# --- 模块四：Server酱推送 (V2 - Turbo稳定版) ---
-def push_to_wechat(send_key, title, content):
-    print("正在推送到微信 (Turbo版)...")
-    # 使用官方推荐的Turbo版API
-    url = f"https://sctapi.ftqq.com/{send_key}.send"
-    data = {'title': title, 'desp': content}
+# --- 模块四：推送 (V3 - PushPlus 稳定版) ---
+def push_to_wechat(token, title, content):
+    print("正在使用 PushPlus 推送到微信...")
+    url = "http://www.pushplus.plus/send"
+    data = {
+        "token": token,
+        "title": title,
+        "content": content,
+        "template": "markdown"
+    }
     try:
-        response = requests.post(url, data=data)
+        response = requests.post(url, json=data)
         response_json = response.json()
-        if response_json.get("code") == 0:
-            print("成功：消息已推送到微信！")
+        if response_json.get("code") == 200:
+            print("成功：消息已通过 PushPlus 推送到微信！")
         else:
-            print(f"错误：推送失败 - {response.text}")
+            print(f"错误：PushPlus 推送失败 - {response.text}")
     except Exception as e:
-        print(f"错误：推送请求失败 - {e}")
+        print(f"错误：PushPlus 推送请求失败 - {e}")
 
-# --- 主执行函数 (V4 - Selenium版) ---
+# --- 主执行函数 (V6 - 最终版) ---
 if __name__ == "__main__":
     gemini_api_key = os.environ.get("GEMINI_API_KEY")
-    server_send_key = os.environ.get("SEND_KEY")
+    pushplus_token = os.environ.get("PUSHPLUS_TOKEN")
 
-    if not gemini_api_key or not server_send_key:
-        print("错误：必须在环境变量中设置 GEMINI_API_KEY 和 SEND_KEY")
+    if not gemini_api_key or not pushplus_token:
+        print("错误：必须在环境变量中设置 GEMINI_API_KEY 和 PUSHPLUS_TOKEN")
     else:
         articles = fetch_jqzj_articles(max_articles=3)
         if articles:
             final_report = "## 🚀 AI前沿每日速报\n\n"
             for article in articles:
-                # 调用内容获取函数时，传入完整的url
                 content = get_article_content(article['url'])
                 summary = summarize_with_gemini(gemini_api_key, article['title'], content)
                 final_report += f"### 📄 {article['title']}\n\n"
@@ -133,9 +134,10 @@ if __name__ == "__main__":
                 final_report += summary
                 final_report += "\n\n---\n\n"
                 time.sleep(1) 
-            push_to_wechat(server_send_key, "今日AI前沿速报", final_report)
+            push_to_wechat(pushplus_token, "今日AI前沿速报", final_report)
         else:
             print("没有获取到文章，今日不推送。")
+
 
 
 
