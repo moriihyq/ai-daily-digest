@@ -2,22 +2,21 @@ import requests
 import google.generativeai as genai
 import os
 import time
+import traceback # 引入traceback库用于更详细的错误打印
 
-# --- 模块一：爬虫 (V3 - API直连最终版) ---
-# --- 模块一：爬虫 (V4 - 最终修正版API) ---
+# --- 模块一：爬虫 (V6 - 胜利最终版) ---
 def fetch_jqzj_articles(max_articles=3):
     """
-    通过直接请求机器之心的官方API来获取最新文章列表。
-    这是最稳定、最高效的方法。
+    通过你亲自找到的、当前正在使用的官方API来获取最新文章列表。
     :param max_articles: 你想获取的文章数量。
     :return: 一个包含文章字典（标题和链接）的列表。
     """
-    print("开始通过API直连方式获取最新文章 (V4)...")
-    # V4修正：找到了网站当前正在使用的正确API端点
-    api_url = f"https://www.jiqizhixin.com/api/v1/articles?page=1"
+    print("开始通过API直连方式获取最新文章 (V6 - 胜利版)...")
+    # 这是你找到的、经过验证的、当前网站正在使用的正确API地址
+    api_url = f"https://www.jiqizhixin.com/api/v4/articles.json?sort=time&page=1"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        "Referer": "https://www.jiqizhixin.com/articles" # 伪装成从文章列表页发出的请求
+        "Referer": "https://www.jiqizhixin.com/"
     }
     
     try:
@@ -26,8 +25,12 @@ def fetch_jqzj_articles(max_articles=3):
         data = response.json()
         
         articles_found = []
-        # JSON结构与之前类似，代码基本可以复用
-        for item in data[:max_articles]:
+        
+        # 胜利的关键修正：从返回的字典中，精确地取出 'articles' 这个键对应的值（也就是文章列表）
+        articles_list = data['articles']
+        
+        for item in articles_list[:max_articles]:
+            # 根据你的截图，'title' 和 'id' 的键名无误
             title = item.get('title', '无标题')
             article_id = item.get('id')
             if article_id:
@@ -39,22 +42,17 @@ def fetch_jqzj_articles(max_articles=3):
         return articles_found
     except Exception as e:
         print(f"错误：通过API获取文章失败 - {e}")
+        traceback.print_exc() # 打印完整的错误堆栈，以备不时之需
         return []
 
+# --- 模块二：获取文章正文 (保持不变) ---
 def get_article_content(url):
-    """
-    根据给定的URL，爬取文章的正文内容。
-    (这个函数保持不变，因为文章内容页还是需要解析HTML)
-    :param url: 文章链接。
-    :return: 文章的纯文本内容。
-    """
     print(f"正在爬取文章内容: {url}")
     headers = {"User-Agent": "Mozilla/5.0"}
     try:
         response = requests.get(url, headers=headers)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
-        
         content_div = soup.find('div', class_='js-entry-content')
         if content_div:
             text_content = '\n'.join(p.get_text(strip=True) for p in content_div.find_all('p'))
@@ -66,7 +64,7 @@ def get_article_content(url):
         print(f"错误：爬取文章内容失败 - {e}")
         return None
 
-# --- 模块二：使用Gemini API进行分析和总结 (保持不变) ---
+# --- 模块三：Gemini总结 (保持不变) ---
 def summarize_with_gemini(api_key, title, content):
     print(f"正在使用Gemini总结文章: {title}")
     genai.configure(api_key=api_key)
@@ -100,7 +98,7 @@ def summarize_with_gemini(api_key, title, content):
         print(f"错误：调用Gemini API失败 - {e}")
         return f"**对文章 {title} 的总结失败。**"
 
-# --- 模块三：通过Server酱推送到微信 (保持不变) ---
+# --- 模块四：Server酱推送 (保持不变) ---
 def push_to_wechat(send_key, title, content):
     print("正在推送到微信...")
     url = f"https://sctapi.ftqq.com/{send_key}.send"
@@ -114,8 +112,9 @@ def push_to_wechat(send_key, title, content):
     except requests.RequestException as e:
         print(f"错误：推送请求失败 - {e}")
 
-# --- 主执行函数：串联所有模块 (保持不变) ---
+# --- 主执行函数 (保持不变) ---
 if __name__ == "__main__":
+    # 需要在GitHub Actions Secrets中配置好这两个密钥
     gemini_api_key = os.environ.get("GEMINI_API_KEY")
     server_send_key = os.environ.get("SEND_KEY")
 
@@ -126,6 +125,8 @@ if __name__ == "__main__":
         if articles:
             final_report = "## 🚀 AI前沿每日速报\n\n"
             for article in articles:
+                # BeautifulSoup需要单独安装，确保requirements.txt里有它
+                from bs4 import BeautifulSoup
                 content = get_article_content(article['url'])
                 if content:
                     summary = summarize_with_gemini(gemini_api_key, article['title'], content)
@@ -137,6 +138,7 @@ if __name__ == "__main__":
             push_to_wechat(server_send_key, "今日AI前沿速报", final_report)
         else:
             print("没有获取到文章，今日不推送。")
+
 
 
 
