@@ -64,7 +64,7 @@ def summarize_with_gemini(title: str, content: str) -> str:
         return f"**对文章 '{title}' 的总结失败：未能获取到原文。**"
     print(f"正在使用Gemini为学生视角总结文章: {title}")
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         prompt = f"""
         作为一名优秀的AI技术研究者和科普专家，请为一名正在学习人工智能的大学二年级学生，深入浅出地解读下面这篇关于“{title}”的文章。
         请严格按照以下Markdown格式输出，语言要既专业又易于理解：
@@ -215,6 +215,7 @@ if __name__ == "__main__":
 
         # 3. 推送整合后的报告
         push_to_wechat(pushplus_token, "今日AI前沿速报 (文章+项目)", final_report)
+
 
 
 
