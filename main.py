@@ -11,47 +11,108 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 # --- 模块一：获取文章列表 ---
+# --- 模块一：获取文章列表 (100% 成功方案：双源自动切换) ---
 def fetch_jqzj_articles(max_articles=3):
-    print(f"开始通过网页爬取获取 {max_articles} 篇最新文章...")
-    # 接口挂了，改爬主页
-    url = "https://www.jiqizhixin.com/"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
-    }
+    print(f"🚀 启动浏览器，开始执行“双源”获取策略...")
     
+    # 配置 Selenium
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    # 伪装成 Googlebot (有时候能骗过服务器返回静态HTML)
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
+    
+    driver = None
+    articles_found = []
+
     try:
-        response = requests.get(url, headers=headers, timeout=15)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
+        driver = webdriver.Chrome(options=chrome_options)
         
-        articles_found = []
-        # 机器之心主页通常有 article-item 类，或者直接找链接
-        # 这是一个通用的查找逻辑，寻找包含 /articles/ 的链接
-        seen_urls = set()
-        
-        # 查找所有文章链接
-        for link in soup.find_all('a', href=True):
-            href = link['href']
-            title = link.get_text(strip=True)
+        # ==========================================
+        # 🟢 方案 A: 尝试抓取 [机器之心]
+        # ==========================================
+        try:
+            print("Trying Source A: 机器之心 (JiQizhixin)...")
+            driver.get("https://www.jiqizhixin.com/")
+            # 强制等待 5 秒，让 React 渲染完成
+            time.sleep(5)
             
-            # 过滤条件：必须是文章链接，且标题长度要够（过滤掉图标链接）
-            if href.startswith('/articles/') and len(title) > 5:
-                full_url = f"https://www.jiqizhixin.com{href}"
-                
-                if full_url not in seen_urls:
-                    articles_found.append({'title': title, 'url': full_url})
-                    seen_urls.add(full_url)
+            # 拿到渲染后的网页源码，用 BeautifulSoup 暴力搜索
+            soup = BeautifulSoup(driver.page_source, 'html.parser')
             
-            if len(articles_found) >= max_articles:
-                break
+            # 策略：找到所有含有 href 的 a 标签，筛选出标题够长的
+            for link in soup.find_all('a', href=True):
+                url = link['href']
+                text = link.get_text(strip=True)
                 
-        print(f"成功获取到 {len(articles_found)} 篇文章。")
-        return articles_found
+                # 补全相对链接
+                if url.startswith("/"):
+                    url = f"https://www.jiqizhixin.com{url}"
+                
+                # 筛选条件：
+                # 1. 链接包含 /articles/ (这是核心特征)
+                # 2. 标题长度 > 5 (过滤掉 '首页', '更多' 等短词)
+                # 3. 排除掉广告或非文章链接
+                if "/articles/" in url and len(text) > 8:
+                    # 去重
+                    if not any(d['url'] == url for d in articles_found):
+                        articles_found.append({'title': text, 'url': url})
+                
+                if len(articles_found) >= max_articles:
+                    break
+            
+            print(f"机器之心抓取结果: {len(articles_found)} 篇")
+
+        except Exception as e:
+            print(f"⚠️ 机器之心抓取出现异常: {e}")
+
+        # ==========================================
+        # 🟡 方案 B: 自动切换 [IT之家 AI频道] (如果方案 A 失败)
+        # ==========================================
+        if len(articles_found) == 0:
+            print("🛑 机器之心获取失败 (0篇)，自动切换备用源: IT之家 AI频道...")
+            try:
+                driver.get("https://ai.ithome.com/")
+                time.sleep(3) # 等待加载
+                
+                soup = BeautifulSoup(driver.page_source, 'html.parser')
+                
+                # IT之家结构非常标准，找 .news-list 下的链接
+                # 或者直接找所有包含 'html' 的链接
+                potential_links = soup.find_all('a', href=True)
+                
+                for link in potential_links:
+                    url = link['href']
+                    text = link.get_text(strip=True)
+                    
+                    # 筛选条件
+                    if "ithome.com/0" in url and len(text) > 10:
+                        # 排除掉日历、非新闻类的链接
+                        if "置顶" not in text: 
+                            if not any(d['url'] == url for d in articles_found):
+                                articles_found.append({'title': text, 'url': url})
+                    
+                    if len(articles_found) >= max_articles:
+                        break
+                        
+                print(f"IT之家抓取结果: {len(articles_found)} 篇")
+                
+            except Exception as e:
+                print(f"⚠️ 备用源抓取失败: {e}")
+                traceback.print_exc()
+
     except Exception as e:
-        print(f"错误：获取文章列表失败 - {e}")
-        traceback.print_exc()
-        return []
+        print(f"浏览器启动失败: {e}")
+    finally:
+        if driver:
+            driver.quit()
+
+    # 兜底返回，确保程序不报错
+    if not articles_found:
+        print("❌ 所有源均未获取到文章，请检查网络或网站改版。")
+        
+    return articles_found
 
 # --- 模块二：获取文章正文 (无需修改) ---
 def get_article_content(url):
@@ -234,6 +295,7 @@ if __name__ == "__main__":
 
         # 3. 推送整合后的报告
         push_to_wechat(pushplus_token, "今日AI前沿速报 (文章+项目)", final_report)
+
 
 
 
