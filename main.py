@@ -11,26 +11,45 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 # --- 模块一：获取文章列表 ---
-def fetch_jqzj_articles(max_articles=3): # <-- 修改回获取 3 篇文章
-    print(f"开始通过API获取 {max_articles} 篇最新文章...")
-    api_url = "https://www.jiqizhixin.com/api/v4/articles.json?sort=time&page=1"
-    headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://www.jiqizhixin.com/"}
+def fetch_jqzj_articles(max_articles=3):
+    print(f"开始通过网页爬取获取 {max_articles} 篇最新文章...")
+    # 接口挂了，改爬主页
+    url = "https://www.jiqizhixin.com/"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+    }
+    
     try:
-        response = requests.get(api_url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
-        data = response.json()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
         articles_found = []
-        articles_list = data.get('articles', [])
-        for item in articles_list[:max_articles]:
-            title = item.get('title', '无标题')
-            article_id = item.get('id')
-            if article_id:
-                link = f"https://www.jiqizhixin.com/articles/{article_id}"
-                articles_found.append({'title': title, 'url': link})
+        # 机器之心主页通常有 article-item 类，或者直接找链接
+        # 这是一个通用的查找逻辑，寻找包含 /articles/ 的链接
+        seen_urls = set()
+        
+        # 查找所有文章链接
+        for link in soup.find_all('a', href=True):
+            href = link['href']
+            title = link.get_text(strip=True)
+            
+            # 过滤条件：必须是文章链接，且标题长度要够（过滤掉图标链接）
+            if href.startswith('/articles/') and len(title) > 5:
+                full_url = f"https://www.jiqizhixin.com{href}"
+                
+                if full_url not in seen_urls:
+                    articles_found.append({'title': title, 'url': full_url})
+                    seen_urls.add(full_url)
+            
+            if len(articles_found) >= max_articles:
+                break
+                
         print(f"成功获取到 {len(articles_found)} 篇文章。")
         return articles_found
     except Exception as e:
-        print(f"错误：获取文章列表API失败 - {e}")
+        print(f"错误：获取文章列表失败 - {e}")
         traceback.print_exc()
         return []
 
@@ -136,7 +155,7 @@ def fetch_github_trending(top_n=1):
 def analyze_project_with_gemini(project_data: dict) -> str:
     print(f"正在使用 Gemini 分析开源项目: {project_data['name']}")
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         prompt = f"""
         作为一名资深的AI技术导师和顶尖的开源项目贡献者，先深入了解这个项目的准确具体内容，请为一名AI专业的大学生，深入解读下面这个今天在GitHub上很热门的开源项目。
         项目名称：{project_data['name']}
@@ -215,6 +234,7 @@ if __name__ == "__main__":
 
         # 3. 推送整合后的报告
         push_to_wechat(pushplus_token, "今日AI前沿速报 (文章+项目)", final_report)
+
 
 
 
