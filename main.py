@@ -1,6 +1,8 @@
 import os
 import time
 import traceback
+import urllib.parse
+import urllib.request
 import requests
 import feedparser  # <--- 新增依赖
 from bs4 import BeautifulSoup
@@ -137,9 +139,7 @@ def summarize_with_gemini(title: str, content: str) -> str:
         
     print(f"正在使用Gemini为学生视角总结文章: {title}")
     try:
-        model = genai.GenerativeModel('gemini-2.0-flash') # 建议升级使用 2.0-flash 或保持 1.5/pro
-        # 如果你的库只有 1.5 或 1.0，请改回 'gemini-1.5-flash' 或 'gemini-pro'
-        # 注意：user 代码里写的是 gemini-2.5-flash，这可能是不存在的版本，建议用 gemini-1.5-flash
+        # Use a stable version of Gemini for article summarization
         model_name = 'gemini-1.5-flash' 
         model = genai.GenerativeModel(model_name)
 
@@ -163,8 +163,8 @@ def summarize_with_gemini(title: str, content: str) -> str:
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
-        print(f"错误：调用Gemini API失败 - {e}")
-        # traceback.print_exc()
+        print(f"错误：调用Gemini API总结文章失败 - {e}")
+        traceback.print_exc()
         return f"**对文章 '{title}' 的总结失败：API调用出错。**"
 
 # --- 模块四：推送 (保持不变) ---
@@ -221,7 +221,7 @@ def fetch_github_trending(top_n=1):
 def analyze_project_with_gemini(project_data: dict) -> str:
     print(f"正在使用 Gemini 分析开源项目: {project_data['name']}")
     try:
-        model_name = 'gemini-2.5-flash' # 修正版本号
+        model_name = 'gemini-1.5-flash' # 修正版本号为有效模型
         model = genai.GenerativeModel(model_name)
         prompt = f"""
         请为一名AI专业的大学生，深入解读这个GitHub热门项目。
@@ -244,7 +244,67 @@ def analyze_project_with_gemini(project_data: dict) -> str:
         return response.text
     except Exception as e:
         print(f"错误：调用 Gemini 分析项目失败 - {e}")
+        traceback.print_exc()
         return f"**对项目 '{project_data['name']}' 的分析失败。**"
+
+# --- 模块七：获取并分析 Arxiv 论文 ---
+def fetch_arxiv_papers(max_papers=3):
+    print("🚀 启动 Arxiv 最新前沿论文搜索 (聚焦 GUI-Agent & 具身智能)...")
+    
+    # 关键词构建：GUI agent, vision language navigation, embodied AI等
+    search_query = 'all:"GUI agent" OR all:"embodied AI" OR all:"vision-language navigation"'
+    # URL 编码
+    search_query = urllib.parse.quote(search_query)
+    
+    url = f'http://export.arxiv.org/api/query?search_query={search_query}&start=0&max_results={max_papers}&sortBy=submittedDate&sortOrder=descending'
+    
+    papers = []
+    try:
+        response = urllib.request.urlopen(url)
+        feed = feedparser.parse(response)
+        
+        for entry in feed.entries:
+            paper_info = {
+                'title': entry.title,
+                'url': entry.id,
+                'summary': entry.summary,
+                'authors': [author.name for author in entry.authors]
+            }
+            papers.append(paper_info)
+            print(f"   Found Paper: {paper_info['title']}")
+            
+    except Exception as e:
+        print(f"❌ 拉取 Arxiv 失败: {e}")
+        traceback.print_exc()
+        
+    print(f"✅ 总共获取到 {len(papers)} 篇最新相关论文。")
+    return papers
+
+def analyze_paper_with_gemini(paper_data: dict) -> str:
+    print(f"正在使用 Gemini 分析论文: {paper_data['title']}")
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        prompt = f"""
+        作为一名AI专业的研究人员，请深入浅出地解读这篇最新论文的摘要，提取其核心贡献。
+        论文标题：{paper_data['title']}
+        作者：{', '.join(paper_data['authors'])}
+        摘要内容：{paper_data['summary']}
+        
+        请严格按照以下Markdown格式输出：
+        ### 🎯 核心解决的问题
+        (一句话概括)
+        ### 🔬 创新点/方法
+        - **点一**：(...)
+        - **点二**：(...)
+        ### 🚀 对研究的启发
+        (这篇论文对 GUI-Agent 或 具身智能方向有什么启发价值)
+        """
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        print(f"错误：调用 Gemini 分析论文失败 - {e}")
+        traceback.print_exc()
+        return f"**对论文 '{paper_data['title']}' 的分析失败。**"
 
 # --- 主执行函数 ---
 if __name__ == "__main__":
@@ -294,12 +354,31 @@ if __name__ == "__main__":
             
             final_report += f"### 🚀 {project['name']} (⭐ {project['stars']})\n"
             final_report += f"🔗 [项目地址]({project['url']})\n\n"
-            final_report += analysis
+            final_report += analysis + "\n\n"
         else:
-            final_report += "今日未能获取到热门项目。\n"
+            final_report += "今日未能获取到热门项目。\n\n"
+
+        final_report += "---\n\n"
+
+        # --- Part 3: Arxiv 前沿论文 (GUI Agent & 具身智能) ---
+        final_report += "## 🎓 最新前沿学术论文\n"
+        arxiv_papers = fetch_arxiv_papers(max_papers=2)
+        if arxiv_papers:
+            for index, paper in enumerate(arxiv_papers):
+                print(f"--- 处理论文 {index+1}: {paper['title']} ---")
+                
+                analysis = analyze_paper_with_gemini(paper)
+                
+                final_report += f"### {index+1}. {paper['title']}\n"
+                final_report += f"👨‍🔬 **作者**: {', '.join(paper['authors'])}\n"
+                final_report += f"🔗 [Arxiv 链接]({paper['url']})\n\n"
+                final_report += analysis + "\n\n"
+        else:
+            final_report += "今日最新前沿论文暂无更新。\n\n"
 
         # --- 推送 ---
-        push_to_wechat(pushplus_token, "今日AI速报 (RSS修复版)", final_report)
+        push_to_wechat(pushplus_token, "今日AI速报 (含Arxiv学术版)", final_report)
+
 
 
 
