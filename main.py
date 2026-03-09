@@ -221,7 +221,7 @@ def fetch_github_trending(top_n=1):
 def analyze_project_with_gemini(project_data: dict) -> str:
     print(f"正在使用 Gemini 分析开源项目: {project_data['name']}")
     try:
-        model_name = 'gemini-1.5-flash' # 修正版本号为有效模型
+        model_name = 'gemini-3.1-flash-lite-preview' # 修正版本号为有效模型
         model = genai.GenerativeModel(model_name)
         prompt = f"""
         请为一名AI专业的大学生，深入解读这个GitHub热门项目。
@@ -283,7 +283,7 @@ def fetch_arxiv_papers(max_papers=3):
 def analyze_paper_with_gemini(paper_data: dict) -> str:
     print(f"正在使用 Gemini 分析论文: {paper_data['title']}")
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
         prompt = f"""
         作为一名AI专业的研究人员，请深入浅出地解读这篇最新论文的摘要，提取其核心贡献。
         论文标题：{paper_data['title']}
@@ -378,6 +378,7 @@ if __name__ == "__main__":
 
         # --- 推送 ---
         push_to_wechat(pushplus_token, "今日AI速报 (含Arxiv学术版)", final_report)
+
 
 
 
