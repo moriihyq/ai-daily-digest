@@ -140,7 +140,7 @@ def summarize_with_gemini(title: str, content: str) -> str:
     print(f"正在使用Gemini为学生视角总结文章: {title}")
     try:
         # Use a stable version of Gemini for article summarization
-        model_name = 'gemini-1.5-flash' 
+        model_name = 'gemini-3.1-flash-image-preview' 
         model = genai.GenerativeModel(model_name)
 
         prompt = f"""
@@ -378,6 +378,7 @@ if __name__ == "__main__":
 
         # --- 推送 ---
         push_to_wechat(pushplus_token, "今日AI速报 (含Arxiv学术版)", final_report)
+
 
 
 
