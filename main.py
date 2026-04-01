@@ -80,7 +80,7 @@ def summarize_with_gemini(title: str, content: str) -> str:
         
     print(f"🧠 [文章分析] 进行前沿动向提取与自动扫盲判别: {title}")
     try:
-        model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
+        model = genai.GenerativeModel('gemini-3-flash-preview')
         prompt = f"""
         作为一名资深AI算法高级研究员，请重点提取这篇技术文章的研究方向与机制创新。
         文章标题：{title}
